@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VisionGuard AI</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #080b12;
+            color: white;
+        }
+
+        header {
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid #252b38;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 32px;
+        }
+
+        header p {
+            color: #9da7b8;
+            margin: 8px 0 0;
+        }
+
+        .status {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 7px 14px;
+            border-radius: 20px;
+            background: #202633;
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        .main {
+            width: 90%;
+            max-width: 1000px;
+            margin: 25px auto;
+        }
+
+        .camera-container {
+            position: relative;
+            width: 100%;
+            max-width: 850px;
+            margin: auto;
+            border-radius: 18px;
+            overflow: hidden;
+            background: #000;
+            border: 2px solid #252b38;
+        }
+
+        video {
+            width: 100%;
+            display: block;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .controls {
+            text-align: center;
+            margin: 20px;
+        }
+
+        button {
+            background: #ffffff;
+            color: #080b12;
+            border: none;
+            border-radius: 10px;
+            padding: 13px 28px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #dddddd;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .card {
+            background: #111621;
+            border: 1px solid #252b38;
+            border-radius: 14px;
+            padding: 18px;
+            transition: 0.2s;
+        }
+
+        .card-title {
+            color: #9da7b8;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .card-value {
+            font-size: 22px;
+            font-weight: bold;
+        }
+
+        #result {
+            color: white;
+        }
+
+        #warning {
+            color: #ffd166;
+        }
+
+        /* DANGER ALERT */
+        .warning-active {
+            background: #3a1515;
+            border: 2px solid #ff4444;
+            color: #ff4444;
+            transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(255, 68, 68, 0.35);
+        }
+
+        .warning-active .card-title {
+            color: #ff8888;
+        }
+
+        .features {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        .feature {
+            background: #111621;
+            border: 1px solid #252b38;
+            padding: 10px 15px;
+            border-radius: 10px;
+            color: #c8d0dc;
+        }
+
+        footer {
+            text-align: center;
+            padding: 25px;
+            color: #687386;
+            font-size: 13px;
+        }
+
+        @media (max-width: 600px) {
+
+            header h1 {
+                font-size: 25px;
+            }
+
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+
+            .main {
+                width: 95%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+
+        <h1>👓 VisionGuard AI</h1>
+
+        <p>AI-Powered Vision Assistant</p>
+
+        <div id="status" class="status">
+            ● SYSTEM OFFLINE
+        </div>
+
+    </header>
+
+
+    <div class="main">
+
+        <div class="controls">
+
+            <button id="startButton">
+                📷 Start AI Vision
+            </button>
+
+        </div>
+
+
+        <div class="camera-container">
+
+            <video
+                id="camera"
+                autoplay
+                playsinline>
+            </video>
+
+            <canvas id="canvas"></canvas>
+
+        </div>
+
+
+        <div class="dashboard">
+
+            <div class="card">
+
+                <div class="card-title">
+                    CURRENT DETECTION
+                </div>
+
+                <div
+                    id="result"
+                    class="card-value">
+                    Waiting for AI...
+                </div>
+
+            </div>
+
+
+            <div
+                id="warningCard"
+                class="card">
+
+                <div class="card-title">
+                    VOICE WARNING
+                </div>
+
+                <div
+                    id="warning"
+                    class="card-value">
+                    Standby
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="features">
+
+            <div class="feature">
+                🤖 AI Object Detection
+            </div>
+
+            <div class="feature">
+                🔊 Voice Assistance
+            </div>
+
+            <div class="feature">
+                ⚠️ Hazard Alerts
+            </div>
+
+            <div class="feature">
+                👓 Smart Glasses Concept
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <footer>
+
+        VisionGuard AI • Hack Devengers 2.0 Prototype
+
+    </footer>
+
+
+    <script>
+
+        let model = null;
+
+        let lastSpokenObjects = "";
+
+        let lastSpokenTime = 0;
+
+        let detecting = false;
+
+
+        const video =
+            document.getElementById("camera");
+
+        const canvas =
+            document.getElementById("canvas");
+
+        const ctx =
+            canvas.getContext("2d");
+
+        const result =
+            document.getElementById("result");
+
+        const warning =
+            document.getElementById("warning");
+
+        const warningCard =
+            document.getElementById("warningCard");
+
+        const status =
+            document.getElementById("status");
+
+        const startButton =
+            document.getElementById("startButton");
+
+
+        startButton.addEventListener(
+            "click",
+            startAI
+        );
+
+
+        async function startAI() {
+
+            try {
+
+                startButton.disabled = true;
+
+                status.innerText =
+                    "● LOADING AI";
+
+                result.innerText =
+                    "Loading AI... 🤖";
+
+
+                model =
+                    await cocoSsd.load();
+
+
+                status.innerText =
+                    "● STARTING CAMERA";
+
+                result.innerText =
+                    "Starting camera... 📷";
+
+
+                const stream =
+                    await navigator.mediaDevices
+                        .getUserMedia({
+
+                            video: {
+                                facingMode: "user"
+                            },
+
+                            audio: false
+
+                        });
+
+
+                video.srcObject = stream;
+
+
+                video.onloadedmetadata =
+                    function () {
+
+                        video.play();
+
+
+                        canvas.width =
+                            video.videoWidth;
+
+                        canvas.height =
+                            video.videoHeight;
+
+
+                        status.innerText =
+                            "● AI ACTIVE";
+
+                        result.innerText =
+                            "AI is ready! 👀";
+
+                        warning.innerText =
+                            "Listening... 🔊";
+
+
+                        detecting = true;
+
+                        detectObjects();
+
+                    };
+
+
+            } catch (error) {
+
+                console.error(error);
+
+                status.innerText =
+                    "● ERROR";
+
+                result.innerText =
+                    error.message;
+
+                startButton.disabled =
+                    false;
+
+            }
+
+        }
+
+
+        async function detectObjects() {
+
+            if (!detecting || !model) {
+                return;
+            }
+
+
+            try {
+
+                const predictions =
+                    await model.detect(video);
+
+
+                ctx.clearRect(
+                    0,
+                    0,
+                    canvas.width,
+                    canvas.height
+                );
+
+
+                let detectedObjects = [];
+
+
+                for (
+                    const prediction
+                    of predictions
+                ) {
+
+                    const object =
+                        prediction.class;
+
+                    const score =
+                        prediction.score;
+
+
+                    // 20% confidence threshold
+                    if (score < 0.20) {
+                        continue;
+                    }
+
+
+                    detectedObjects.push(
+                        object
+                    );
+
+
+                    const x =
+                        prediction.bbox[0];
+
+                    const y =
+                        prediction.bbox[1];
+
+                    const width =
+                        prediction.bbox[2];
+
+                    const height =
+                        prediction.bbox[3];
+
+
+                    // Detection box
+                    ctx.strokeStyle =
+                        "#00ff88";
+
+                    ctx.lineWidth = 4;
+
+
+                    ctx.strokeRect(
+                        x,
+                        y,
+                        width,
+                        height
+                    );
+
+
+                    // Object label
+                    ctx.font =
+                        "20px Arial";
+
+                    ctx.fillStyle =
+                        "#00ff88";
+
+
+                    ctx.fillText(
+
+                        object +
+                        " " +
+                        Math.round(
+                            score * 100
+                        ) +
+                        "%",
+
+                        x,
+
+                        y > 25
+                            ? y - 5
+                            : y + 25
+
+                    );
+
+                }
+
+
+                if (
+                    detectedObjects.length
+                    > 0
+                ) {
+
+                    result.innerText =
+                        "I see: " +
+                        detectedObjects.join(
+                            ", "
+                        ) +
+                        " 👀";
+
+
+                    const uniqueObjects =
+                        [
+                            ...new Set(
+                                detectedObjects
+                            )
+                        ];
+
+
+                    const objectsText =
+                        uniqueObjects.join(
+                            ", "
+                        );
+
+
+                    const currentTime =
+                        Date.now();
+
+
+                    if (
+
+                        objectsText
+                        !==
+                        lastSpokenObjects
+
+                        ||
+
+                        currentTime -
+                        lastSpokenTime
+                        > 5000
+
+                    ) {
+
+
+                        let message = "";
+
+                        let dangerDetected =
+                            false;
+
+
+                        // BUS
+                        if (
+                            uniqueObjects
+                                .includes("bus")
+                        ) {
+
+                            message =
+                                "Warning! Bus ahead";
+
+                            dangerDetected =
+                                true;
+
+                        }
+
+
+                        // CAR
+                        else if (
+                            uniqueObjects
+                                .includes("car")
+                        ) {
+
+                            message =
+                                "Warning! Car ahead";
+
+                            dangerDetected =
+                                true;
+
+                        }
+
+
+                        // MOTORCYCLE
+                        else if (
+                            uniqueObjects
+                                .includes(
+                                    "motorcycle"
+                                )
+                        ) {
+
+                            message =
+                                "Warning! Motorcycle ahead";
+
+                            dangerDetected =
+                                true;
+
+                        }
+
+
+                        // BICYCLE
+                        else if (
+                            uniqueObjects
+                                .includes(
+                                    "bicycle"
+                                )
+                        ) {
+
+                            message =
+                                "Bicycle ahead";
+
+                        }
+
+
+                        // PERSON
+                        else if (
+                            uniqueObjects
+                                .includes(
+                                    "person"
+                                )
+                        ) {
+
+                            message =
+                                "Person ahead";
+
+                        }
+
+
+                        // OTHER OBJECTS
+                        else {
+
+                            message =
+                                objectsText +
+                                " detected";
+
+                        }
+
+
+                        // Activate danger design
+                        if (dangerDetected) {
+
+                            warningCard
+                                .classList
+                                .add(
+                                    "warning-active"
+                                );
+
+                        } else {
+
+                            warningCard
+                                .classList
+                                .remove(
+                                    "warning-active"
+                                );
+
+                        }
+
+
+                        warning.innerText =
+                            message;
+
+
+                        // Voice
+                        const speech =
+                            new SpeechSynthesisUtterance(
+                                message
+                            );
+
+
+                        speech.rate =
+                            0.9;
+
+                        speech.pitch =
+                            1;
+
+
+                        window.speechSynthesis
+                            .cancel();
+
+
+                        window.speechSynthesis
+                            .speak(
+                                speech
+                            );
+
+
+                        lastSpokenObjects =
+                            objectsText;
+
+                        lastSpokenTime =
+                            currentTime;
+
+                    }
+
+                }
+
+
+                else {
+
+                    result.innerText =
+                        "No objects detected";
+
+                    warning.innerText =
+                        "No warning";
+
+                    warningCard
+                        .classList
+                        .remove(
+                            "warning-active"
+                        );
+
+                }
+
+
+            } catch (error) {
+
+                console.error(
+                    "Detection error:",
+                    error
+                );
+
+            }
+
+
+            setTimeout(
+                detectObjects,
+                1000
+            );
+
+        }
+
+    </script>
+
+</body>
+</html>
